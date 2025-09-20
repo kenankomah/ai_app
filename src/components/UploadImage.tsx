@@ -16,6 +16,7 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+    const [resultImage, setResultImage] = useState<string | null>(null);
 
     function handleClick() {
         inputRef.current?.click();
@@ -71,12 +72,18 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
             const data = (await response.json()) as {
                 ok?: boolean;
                 size?: number;
+                imageBase64?: string;
+                mimeType?: string;
             };
             setSubmitSuccess(
                 typeof data.size === "number"
                     ? `Uploaded. Image size: ${data.size} bytes.`
                     : "Uploaded successfully."
             );
+            if (data.imageBase64) {
+                const type = data.mimeType || "image/png";
+                setResultImage(`data:${type};base64,${data.imageBase64}`);
+            }
         } catch (err) {
             setSubmitError(
                 err instanceof Error ? err.message : "Unexpected error"
@@ -166,6 +173,20 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                     </p>
                 ) : null}
             </div>
+
+            {resultImage ? (
+                <div className="w-full flex flex-col items-center gap-2">
+                    <h2 className="text-lg font-semibold mt-2">Result</h2>
+                    <Image
+                        src={resultImage}
+                        alt="Generated result"
+                        width={512}
+                        height={512}
+                        unoptimized
+                        className="h-[32rem] w-[32rem] object-contain rounded-md border border-black/10 dark:border-white/20"
+                    />
+                </div>
+            ) : null}
         </form>
     );
 }
