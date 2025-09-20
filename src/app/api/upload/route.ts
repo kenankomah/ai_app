@@ -38,7 +38,10 @@ export async function POST(request: NextRequest) {
         );
         const mimeType = file.type || "image/png";
 
-        const contents: Array<any> = [];
+        const contents: Array<{
+            text?: string;
+            inlineData?: { mimeType: string; data: string };
+        }> = [];
         if (promptText && promptText !== "null" && promptText !== "undefined") {
             contents.push({ text: promptText });
         }
@@ -74,17 +77,91 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const parts = (response.candidates?.[0]?.content?.parts ??
-            []) as Array<{
+        // Handle safety blocks and rejections
+        const promptFeedback = (
+            response as unknown as {
+                promptFeedback?: {
+                    blockReason?: string;
+                    blockReasonMessage?: string;
+                };
+            }
+        )?.promptFeedback;
+        if (promptFeedback?.blockReason) {
+            const msg = promptFeedback.blockReasonMessage
+                ? `Request blocked: ${promptFeedback.blockReason} - ${promptFeedback.blockReasonMessage}`
+                : `Request blocked: ${promptFeedback.blockReason}`;
+            return NextResponse.json({ error: msg }, { status: 400 });
+        }
+
+        const firstCandidate = response.candidates?.[0] as
+            | {
+                  finishReason?: string;
+                  content?: {
+                      parts?: Array<{
+                          text?: string;
+                          inlineData?: { data?: string; mimeType?: string };
+                      }>;
+                  };
+                  safetyRatings?: unknown;
+              }
+            | undefined;
+
+        if (
+            firstCandidate?.finishReason &&
+            [
+                "SAFETY",
+                "BLOCKLIST",
+                "PROHIBITED",
+                "RECITATION",
+                "OTHER",
+                "ERROR",
+            ].includes(String(firstCandidate.finishReason).toUpperCase())
+        ) {
+            const safetyDetails = firstCandidate?.safetyRatings
+                ? ` Details: ${JSON.stringify(firstCandidate.safetyRatings)}`
+                : "";
+            return NextResponse.json(
+                {
+                    error: `Generation blocked by policy (${firstCandidate.finishReason}).${safetyDetails}`,
+                },
+                { status: 400 }
+            );
+        }
+
+        const parts = (firstCandidate?.content?.parts ?? []) as Array<{
             text?: string;
             inlineData?: { data?: string; mimeType?: string };
         }>;
         const imagePart = parts.find((p) => p.inlineData?.data);
         if (!imagePart?.inlineData?.data) {
-            return NextResponse.json(
-                { error: "Model returned no image" },
-                { status: 502 }
-            );
+            // Build a more descriptive reason when no image is returned
+            const textMsg = parts.find((p) => p.text)?.text;
+            const finishReason = firstCandidate?.finishReason;
+            const finishMessage = (
+                firstCandidate as unknown as { finishMessage?: string }
+            )?.finishMessage;
+            const safetyDetails = firstCandidate?.safetyRatings
+                ? ` Details: ${JSON.stringify(firstCandidate.safetyRatings)}`
+                : "";
+
+            const reasons: string[] = [];
+            if (promptFeedback?.blockReason) {
+                reasons.push(
+                    promptFeedback.blockReasonMessage
+                        ? `Blocked: ${promptFeedback.blockReason} - ${promptFeedback.blockReasonMessage}`
+                        : `Blocked: ${promptFeedback.blockReason}`
+                );
+            }
+            if (finishReason) reasons.push(`Finish reason: ${finishReason}`);
+            if (finishMessage) reasons.push(`Message: ${finishMessage}`);
+            if (textMsg) reasons.push(`Model message: ${textMsg}`);
+            if (safetyDetails) reasons.push(safetyDetails);
+
+            const msg =
+                reasons.length > 0
+                    ? reasons.join(" | ")
+                    : "Model returned no image";
+            return NextResponse.json({ error: msg }, { status: 400 });
         }
 
         return NextResponse.json({

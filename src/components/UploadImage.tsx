@@ -19,6 +19,10 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
     const [resultImage, setResultImage] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState<boolean>(false);
 
+    function formatMB(bytes: number): string {
+        return (bytes / (1024 * 1024)).toFixed(2);
+    }
+
     function triggerFileDialog() {
         inputRef.current?.click();
     }
@@ -96,7 +100,7 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
             };
             setSubmitSuccess(
                 typeof data.size === "number"
-                    ? `Uploaded. Image size: ${data.size} bytes.`
+                    ? `Uploaded. Image size: ${formatMB(data.size)} MB.`
                     : "Uploaded successfully."
             );
             if (data.imageBase64) {
@@ -197,7 +201,10 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                                 />
                             ) : null}
                             <p className="text-xs text-foreground/60 truncate max-w-full">
-                                {selectedFile.name}
+                                {selectedFile.name}{" "}
+                                <span className="text-foreground/50">
+                                    ({formatMB(selectedFile.size)} MB)
+                                </span>
                             </p>
                         </div>
                         <div className="flex flex-col gap-3">
