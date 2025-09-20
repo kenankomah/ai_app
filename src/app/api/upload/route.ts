@@ -4,18 +4,16 @@ import { GoogleGenAI } from "@google/genai";
 export async function POST(request: NextRequest) {
     try {
         const formData = await request.formData();
-        const file = formData.get("file");
+        const filePart = formData.get("file");
         const prompt = formData.get("prompt");
+        const file = filePart instanceof File ? filePart : null;
 
-        if (!(file instanceof File)) {
-            return NextResponse.json(
-                { error: "Missing image file" },
-                { status: 400 }
-            );
+        let arrayBuffer: ArrayBuffer | null = null;
+        let byteLength = 0;
+        if (file) {
+            arrayBuffer = await file.arrayBuffer();
+            byteLength = arrayBuffer.byteLength;
         }
-
-        const arrayBuffer = await file.arrayBuffer();
-        const byteLength = arrayBuffer.byteLength;
 
         // Log to server console
         const promptText = typeof prompt === "string" ? prompt : String(prompt);
@@ -33,10 +31,10 @@ export async function POST(request: NextRequest) {
 
         const ai = new GoogleGenAI({ apiKey });
 
-        const base64Data = Buffer.from(new Uint8Array(arrayBuffer)).toString(
-            "base64"
-        );
-        const mimeType = file.type || "image/png";
+        const base64Data = arrayBuffer
+            ? Buffer.from(new Uint8Array(arrayBuffer)).toString("base64")
+            : null;
+        const mimeType = file?.type || "image/png";
 
         const contents: Array<{
             text?: string;
@@ -45,12 +43,21 @@ export async function POST(request: NextRequest) {
         if (promptText && promptText !== "null" && promptText !== "undefined") {
             contents.push({ text: promptText });
         }
-        contents.push({
-            inlineData: {
-                mimeType,
-                data: base64Data,
-            },
-        });
+        if (base64Data) {
+            contents.push({
+                inlineData: {
+                    mimeType,
+                    data: base64Data,
+                },
+            });
+        }
+
+        if (contents.length === 0) {
+            return NextResponse.json(
+                { error: "Provide a prompt or an image." },
+                { status: 400 }
+            );
+        }
 
         let response;
         try {
@@ -166,7 +173,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             ok: true,
-            size: byteLength,
+            size: byteLength || undefined,
             imageBase64: imagePart.inlineData.data,
             mimeType: imagePart.inlineData.mimeType || "image/png",
         });

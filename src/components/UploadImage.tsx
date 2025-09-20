@@ -69,15 +69,17 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
         setSubmitError(null);
         setSubmitSuccess(null);
 
-        if (!selectedFile) {
-            setSubmitError("Please choose an image before submitting.");
+        if (!selectedFile && !instructions.trim()) {
+            setSubmitError("Enter a prompt or upload an image.");
             return;
         }
 
         try {
             setIsSubmitting(true);
             const body = new FormData();
-            body.append("file", selectedFile);
+            if (selectedFile) {
+                body.append("file", selectedFile);
+            }
             body.append("prompt", instructions);
 
             const response = await fetch("/api/upload", {
@@ -184,105 +186,104 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                     </div>
                 ) : null}
 
-                {selectedFile ? (
-                    <div className="mt-6 grid gap-6 md:grid-cols-2 md:gap-8">
-                        <div className="flex flex-col items-center gap-3">
-                            <p className="text-sm text-foreground/70">
-                                Preview
-                            </p>
-                            {previewUrl ? (
-                                <Image
-                                    src={previewUrl}
-                                    alt="Selected image preview"
-                                    width={512}
-                                    height={512}
-                                    unoptimized
-                                    className="h-[28rem] w-[28rem] md:h-[32rem] md:w-[32rem] object-contain rounded-lg border border-black/10 dark:border-white/20 bg-black/5"
-                                />
-                            ) : null}
+                <div className="mt-6 grid gap-6 md:grid-cols-2 md:gap-8">
+                    <div className="flex flex-col items-center gap-3">
+                        <p className="text-sm text-foreground/70">
+                            {selectedFile ? "Preview" : "Optional image"}
+                        </p>
+                        {selectedFile && previewUrl ? (
+                            <Image
+                                src={previewUrl}
+                                alt="Selected image preview"
+                                width={512}
+                                height={512}
+                                unoptimized
+                                className="h-[28rem] w-[28rem] md:h-[32rem] md:w-[32rem] object-contain rounded-lg border border-black/10 dark:border-white/20 bg-black/5"
+                            />
+                        ) : (
+                            <div className="h-[16rem] w-full max-w-[28rem] md:max-w-[32rem] rounded-lg border border-dashed border-black/10 dark:border-white/20 flex items-center justify-center text-foreground/50 text-sm">
+                                No image selected
+                            </div>
+                        )}
+                        {selectedFile ? (
                             <p className="text-xs text-foreground/60 truncate max-w-full">
                                 {selectedFile.name}{" "}
                                 <span className="text-foreground/50">
                                     ({formatMB(selectedFile.size)} MB)
                                 </span>
                             </p>
-                        </div>
-                        <div className="flex flex-col gap-3">
-                            <label
-                                htmlFor="edit-instructions"
-                                className="text-sm font-medium"
+                        ) : null}
+                    </div>
+                    <div className="flex flex-col gap-3">
+                        <label
+                            htmlFor="edit-instructions"
+                            className="text-sm font-medium"
+                        >
+                            Prompt (describe what to generate or edit)
+                        </label>
+                        <textarea
+                            id="edit-instructions"
+                            value={instructions}
+                            onChange={(e) => setInstructions(e.target.value)}
+                            placeholder="E.g., generate a watercolor landscape at sunset; or place this image as a repeating t‑shirt pattern"
+                            className="w-full min-h-40 rounded-md border border-black/10 dark:border-white/20 bg-background text-foreground p-3 text-sm placeholder:text-foreground/50 focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20"
+                        />
+                        <div className="flex items-center gap-3 pt-1">
+                            <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="inline-flex items-center justify-center rounded-md border border-black/10 dark:border-white/20 bg-foreground text-background hover:bg-[#383838] dark:hover:bg-[#ccc] disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium transition-colors"
                             >
-                                Editing instructions
-                            </label>
-                            <textarea
-                                id="edit-instructions"
-                                value={instructions}
-                                onChange={(e) =>
-                                    setInstructions(e.target.value)
-                                }
-                                placeholder="Describe the edits (e.g., place as t‑shirt pattern, brighten, remove background)"
-                                className="w-full min-h-40 rounded-md border border-black/10 dark:border-white/20 bg-background text-foreground p-3 text-sm placeholder:text-foreground/50 focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20"
-                            />
-                            <div className="flex items-center gap-3 pt-1">
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="inline-flex items-center justify-center rounded-md border border-black/10 dark:border-white/20 bg-foreground text-background hover:bg-[#383838] dark:hover:bg-[#ccc] disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium transition-colors"
-                                >
-                                    {isSubmitting ? (
-                                        <span className="inline-flex items-center gap-2">
-                                            <svg
-                                                className="h-4 w-4 animate-spin"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                xmlns="http://www.w3.org/2000/svg"
-                                            >
-                                                <circle
-                                                    className="opacity-25"
-                                                    cx="12"
-                                                    cy="12"
-                                                    r="10"
-                                                    stroke="currentColor"
-                                                    strokeWidth="4"
-                                                ></circle>
-                                                <path
-                                                    className="opacity-75"
-                                                    fill="currentColor"
-                                                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                                                ></path>
-                                            </svg>
-                                            Processing...
-                                        </span>
-                                    ) : (
-                                        "Submit"
-                                    )}
-                                </button>
+                                {isSubmitting ? (
+                                    <span className="inline-flex items-center gap-2">
+                                        <svg
+                                            className="h-4 w-4 animate-spin"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                        >
+                                            <circle
+                                                className="opacity-25"
+                                                cx="12"
+                                                cy="12"
+                                                r="10"
+                                                stroke="currentColor"
+                                                strokeWidth="4"
+                                            ></circle>
+                                            <path
+                                                className="opacity-75"
+                                                fill="currentColor"
+                                                d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                                            ></path>
+                                        </svg>
+                                        Processing...
+                                    </span>
+                                ) : (
+                                    "Submit"
+                                )}
+                            </button>
+                            {selectedFile ? (
                                 <button
                                     type="button"
                                     onClick={() => selectFile(null)}
                                     className="inline-flex items-center justify-center rounded-md border border-black/10 dark:border-white/20 bg-background text-foreground hover:bg-foreground/10 px-4 py-2 text-sm font-medium transition-colors"
                                 >
-                                    Clear
+                                    Clear image
                                 </button>
-                            </div>
-                            {submitError ? (
-                                <div className="w-full rounded-md border border-red-200/60 dark:border-red-400/30 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 p-3 text-sm">
-                                    {submitError}
-                                </div>
-                            ) : null}
-                            {submitSuccess ? (
-                                <div className="w-full rounded-md border border-emerald-200/60 dark:border-emerald-400/30 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 p-3 text-sm">
-                                    {submitSuccess}
-                                </div>
                             ) : null}
                         </div>
+                        {submitError ? (
+                            <div className="w-full rounded-md border border-red-200/60 dark:border-red-400/30 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 p-3 text-sm">
+                                {submitError}
+                            </div>
+                        ) : null}
+                        {submitSuccess ? (
+                            <div className="w-full rounded-md border border-emerald-200/60 dark:border-emerald-400/30 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 p-3 text-sm">
+                                {submitSuccess}
+                            </div>
+                        ) : null}
                     </div>
-                ) : (
-                    <p className="mt-4 text-xs text-foreground/60 text-center">
-                        Supported formats: PNG, JPEG. Max a few MB for best
-                        responsiveness.
-                    </p>
-                )}
+                </div>
             </div>
 
             {resultImage ? (
