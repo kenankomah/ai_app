@@ -318,7 +318,7 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                                 className="max-h-[36rem] w-auto object-contain rounded-lg border border-black/10 dark:border-white/20"
                             />
                         ) : (
-                            <div className="h-[24rem] w-full rounded-lg border border-dashed border-black/10 dark:border-white/20 flex items-center justify-center text-foreground/50 text-sm">
+                            <div className="h-[24rem] w-full rounded-lg border-2 border-dashed border-black/10 dark:border-white/20 flex items-center justify-center text-foreground/50 text-lg">
                                 Generated output will appear here
                             </div>
                         )}
