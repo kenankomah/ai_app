@@ -27,6 +27,15 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
         inputRef.current?.click();
     }
 
+    function handleClear() {
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        setResultImage(null);
+        setSubmitError(null);
+        setSubmitSuccess(null);
+        setErrorMessage(null);
+    }
+
     function selectFile(file: File | null) {
         setErrorMessage(null);
         setSelectedFile(null);
@@ -100,11 +109,7 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                 imageBase64?: string;
                 mimeType?: string;
             };
-            setSubmitSuccess(
-                typeof data.size === "number"
-                    ? `Uploaded. Image size: ${formatMB(data.size)} MB.`
-                    : "Uploaded successfully."
-            );
+            setSubmitSuccess("Image generated successfully.");
             if (data.imageBase64) {
                 const type = data.mimeType || "image/png";
                 setResultImage(`data:${type};base64,${data.imageBase64}`);
@@ -264,10 +269,10 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                                         "Submit"
                                     )}
                                 </button>
-                                {selectedFile ? (
+                                {selectedFile || resultImage ? (
                                     <button
                                         type="button"
-                                        onClick={() => selectFile(null)}
+                                        onClick={handleClear}
                                         className="inline-flex items-center justify-center rounded-md border border-black/10 dark:border-white/20 bg-background text-foreground hover:bg-foreground/10 px-4 py-2 text-sm font-medium transition-colors"
                                     >
                                         Clear image
