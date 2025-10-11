@@ -4,21 +4,48 @@ import { GoogleGenAI } from "@google/genai";
 export async function POST(request: NextRequest) {
     try {
         const formData = await request.formData();
-        const filePart = formData.get("file");
-        const prompt = formData.get("prompt");
-        const file = filePart instanceof File ? filePart : null;
+        const promptPart = formData.get("prompt");
+        const multiFileParts = formData.getAll("files");
+        const singleFilePart = formData.get("file");
 
-        let arrayBuffer: ArrayBuffer | null = null;
-        let byteLength = 0;
-        if (file) {
-            arrayBuffer = await file.arrayBuffer();
-            byteLength = arrayBuffer.byteLength;
+        const files: File[] = [];
+        for (const part of multiFileParts) {
+            if (part instanceof File) files.push(part);
+        }
+        if (files.length === 0 && singleFilePart instanceof File) {
+            files.push(singleFilePart);
+        }
+
+        const promptTextRaw =
+            typeof promptPart === "string" ? promptPart.trim() : "";
+        const hasUserPrompt =
+            promptTextRaw.length > 0 &&
+            promptTextRaw !== "null" &&
+            promptTextRaw !== "undefined";
+        const defaultMergePrompt =
+            "Merge the provided images into a single cohesive image. Blend them naturally, align perspectives, and harmonize colors. Return only the merged image.";
+        const effectivePrompt = hasUserPrompt
+            ? promptTextRaw
+            : files.length > 1
+            ? defaultMergePrompt
+            : "";
+
+        // Load all files (if any) into base64
+        let totalBytes = 0;
+        const fileDatas: { data: string; mimeType: string }[] = [];
+        for (const f of files) {
+            const buf = await f.arrayBuffer();
+            totalBytes += buf.byteLength;
+            fileDatas.push({
+                data: Buffer.from(new Uint8Array(buf)).toString("base64"),
+                mimeType: f.type || "image/png",
+            });
         }
 
         // Log to server console
-        const promptText = typeof prompt === "string" ? prompt : String(prompt);
-        console.log("Prompt:", promptText);
-        console.log("Image size (bytes):", byteLength);
+        console.log("Prompt:", effectivePrompt || "<none>");
+        console.log("Num images:", files.length);
+        console.log("Total image bytes:", totalBytes);
 
         // Call Gemini (Nano Banana) from the server
         const apiKey = process.env.GEMINI_API_KEY;
@@ -31,30 +58,22 @@ export async function POST(request: NextRequest) {
 
         const ai = new GoogleGenAI({ apiKey });
 
-        const base64Data = arrayBuffer
-            ? Buffer.from(new Uint8Array(arrayBuffer)).toString("base64")
-            : null;
-        const mimeType = file?.type || "image/png";
-
         const contents: Array<{
             text?: string;
             inlineData?: { mimeType: string; data: string };
         }> = [];
-        if (promptText && promptText !== "null" && promptText !== "undefined") {
-            contents.push({ text: promptText });
+        if (effectivePrompt) {
+            contents.push({ text: effectivePrompt });
         }
-        if (base64Data) {
+        for (const fd of fileDatas) {
             contents.push({
-                inlineData: {
-                    mimeType,
-                    data: base64Data,
-                },
+                inlineData: { mimeType: fd.mimeType, data: fd.data },
             });
         }
 
         if (contents.length === 0) {
             return NextResponse.json(
-                { error: "Provide a prompt or an image." },
+                { error: "Provide a prompt or at least one image." },
                 { status: 400 }
             );
         }
@@ -173,7 +192,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             ok: true,
-            size: byteLength || undefined,
+            size: totalBytes || undefined,
             imageBase64: imagePart.inlineData.data,
             mimeType: imagePart.inlineData.mimeType || "image/png",
         });

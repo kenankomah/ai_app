@@ -9,8 +9,9 @@ type UploadImageProps = {
 
 export default function UploadImage({ onFileSelected }: UploadImageProps) {
     const inputRef = useRef<HTMLInputElement | null>(null);
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const appendNextSelectionRef = useRef<boolean>(false);
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [previewUrls, setPreviewUrls] = useState<string[]>([]);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [instructions, setInstructions] = useState<string>("");
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -19,41 +20,92 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
     const [resultImage, setResultImage] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState<boolean>(false);
 
-    function formatMB(bytes: number): string {
-        return (bytes / (1024 * 1024)).toFixed(2);
-    }
+    const MAX_IMAGES = 10; // configurable
+    const MAX_TOTAL_BYTES = 25 * 1024 * 1024; // 25MB total, configurable
+
+    // removed size formatter since we don't display per-file sizes in multi-select UI
 
     function triggerFileDialog() {
         inputRef.current?.click();
     }
 
+    function triggerAddMoreDialog() {
+        appendNextSelectionRef.current = true;
+        inputRef.current?.click();
+    }
+
     function handleClear() {
-        setSelectedFile(null);
-        setPreviewUrl(null);
+        setSelectedFiles([]);
+        setPreviewUrls([]);
         setResultImage(null);
         setSubmitError(null);
         setSubmitSuccess(null);
         setErrorMessage(null);
     }
 
-    function selectFile(file: File | null) {
+    function selectFiles(
+        filesLike: FileList | File[] | null,
+        append: boolean = false
+    ) {
         setErrorMessage(null);
-        setSelectedFile(null);
-        setPreviewUrl(null);
         setResultImage(null);
-        if (!file) return;
-        if (!file.type.startsWith("image/")) {
-            setErrorMessage("Please select a valid image file.");
+        if (!filesLike) return;
+
+        const incoming: File[] = Array.from(filesLike).filter((f) =>
+            f.type.startsWith("image/")
+        );
+        if (incoming.length === 0) {
+            setErrorMessage("Please select valid image files.");
             return;
         }
-        setSelectedFile(file);
-        const objectUrl = URL.createObjectURL(file);
-        setPreviewUrl(objectUrl);
-        onFileSelected?.(file);
+
+        // Build combined list respecting append
+        const base = append && selectedFiles.length > 0 ? selectedFiles : [];
+        const combined = [...base, ...incoming];
+
+        // De-dup simple key
+        const seen = new Set<string>();
+        const deduped: File[] = [];
+        for (const f of combined) {
+            const key = `${f.name}_${f.size}_${f.lastModified}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                deduped.push(f);
+            }
+        }
+
+        // Enforce max count
+        if (deduped.length > MAX_IMAGES) {
+            setErrorMessage(`You can upload up to ${MAX_IMAGES} images.`);
+            // Keep the first MAX_IMAGES to avoid surprising the user
+            deduped.length = MAX_IMAGES;
+        }
+
+        // Enforce total size cap
+        const totalBytes = deduped.reduce((acc, f) => acc + f.size, 0);
+        if (totalBytes > MAX_TOTAL_BYTES) {
+            setErrorMessage(
+                `Total size exceeds ${(MAX_TOTAL_BYTES / (1024 * 1024)).toFixed(
+                    1
+                )} MB. ` + `Please remove some images or use smaller files.`
+            );
+            return; // do not update selection
+        }
+
+        setSelectedFiles(deduped);
+
+        // Rebuild preview URLs to match deduped list
+        setPreviewUrls(deduped.map((f) => URL.createObjectURL(f)));
+
+        if (deduped[0]) onFileSelected?.(deduped[0]);
     }
 
     function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
-        selectFile(event.target.files?.[0] ?? null);
+        const append =
+            appendNextSelectionRef.current || selectedFiles.length > 0;
+        selectFiles(event.target.files ?? null, append);
+        appendNextSelectionRef.current = false;
+        event.currentTarget.value = ""; // allow selecting same files again
     }
 
     function handleDragOver(event: React.DragEvent<HTMLDivElement>) {
@@ -69,8 +121,9 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
     function handleDrop(event: React.DragEvent<HTMLDivElement>) {
         event.preventDefault();
         setIsDragging(false);
-        const file = event.dataTransfer.files?.[0] ?? null;
-        selectFile(file);
+        const files = event.dataTransfer.files ?? null;
+        const append = selectedFiles.length > 0;
+        selectFiles(files, append);
     }
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -78,16 +131,20 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
         setSubmitError(null);
         setSubmitSuccess(null);
 
-        if (!selectedFile && !instructions.trim()) {
-            setSubmitError("Enter a prompt or upload an image.");
+        if (selectedFiles.length === 0 && !instructions.trim()) {
+            setSubmitError("Enter a prompt or upload images.");
             return;
         }
 
         try {
             setIsSubmitting(true);
             const body = new FormData();
-            if (selectedFile) {
-                body.append("file", selectedFile);
+            if (selectedFiles.length > 0) {
+                for (const file of selectedFiles) {
+                    body.append("files", file);
+                }
+                // Keep backward compatibility with existing API that expects a single "file"
+                if (selectedFiles[0]) body.append("file", selectedFiles[0]);
             }
             body.append("prompt", instructions);
 
@@ -138,7 +195,7 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
             <div className="grid gap-6 md:grid-cols-2">
                 {/* Left: Input card */}
                 <div className="w-full rounded-2xl border border-black/10 dark:border-white/15 bg-background/70 backdrop-blur-sm shadow-sm p-6 md:p-8">
-                    {!selectedFile ? (
+                    {selectedFiles.length === 0 ? (
                         <div
                             onClick={triggerFileDialog}
                             onDragOver={handleDragOver}
@@ -165,17 +222,17 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                                 </div>
                                 <div className="space-y-1">
                                     <p className="text-sm font-medium">
-                                        Drag and drop an image
+                                        Drag and drop images
                                     </p>
                                     <p className="text-xs text-foreground/60">
-                                        or click to choose a file
+                                        or click to choose files
                                     </p>
                                 </div>
                                 <button
                                     type="button"
                                     className="mt-2 inline-flex items-center justify-center rounded-md border border-black/10 dark:border-white/20 bg-foreground text-background px-3 py-2 text-xs font-medium hover:bg-[#383838] dark:hover:bg-[#ccc] transition-colors"
                                 >
-                                    Choose image
+                                    Choose images
                                 </button>
                             </div>
                         </div>
@@ -185,6 +242,7 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                         ref={inputRef}
                         type="file"
                         accept="image/*"
+                        multiple
                         className="hidden"
                         onChange={handleChange}
                     />
@@ -198,24 +256,39 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                     <div className="mt-6 grid gap-6">
                         <div className="flex flex-col items-center gap-3">
                             <p className="text-sm text-foreground/70">
-                                {selectedFile ? "Preview" : "Optional image"}
+                                {selectedFiles.length > 0
+                                    ? `Preview (${selectedFiles.length} image${
+                                          selectedFiles.length > 1 ? "s" : ""
+                                      })`
+                                    : "Optional images"}
                             </p>
-                            {selectedFile && previewUrl ? (
-                                <Image
-                                    src={previewUrl}
-                                    alt="Selected image preview"
-                                    width={512}
-                                    height={512}
-                                    unoptimized
-                                    className="h-[28rem] w-[28rem] object-contain rounded-lg border border-black/10 dark:border-white/20 bg-black/5"
-                                />
+                            {selectedFiles.length > 0 ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-3 max-w-full">
+                                    {previewUrls.map((url, idx) => (
+                                        <div
+                                            key={idx}
+                                            className="w-40 h-40 rounded-lg border border-black/10 dark:border-white/20 bg-black/5 overflow-hidden flex items-center justify-center"
+                                        >
+                                            <Image
+                                                src={url}
+                                                alt={`Selected image ${
+                                                    idx + 1
+                                                }`}
+                                                width={160}
+                                                height={160}
+                                                unoptimized
+                                                className="object-contain w-full h-full"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
                             ) : null}
-                            {selectedFile ? (
+                            {selectedFiles.length > 0 ? (
                                 <p className="text-xs text-foreground/60 truncate max-w-full">
-                                    {selectedFile.name}{" "}
-                                    <span className="text-foreground/50">
-                                        ({formatMB(selectedFile.size)} MB)
-                                    </span>
+                                    {selectedFiles[0].name}
+                                    {selectedFiles.length > 1
+                                        ? ` + ${selectedFiles.length - 1} more`
+                                        : ""}
                                 </p>
                             ) : null}
                         </div>
@@ -269,13 +342,25 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                                         "Submit"
                                     )}
                                 </button>
-                                {selectedFile || resultImage ? (
+                                {selectedFiles.length > 0 ? (
+                                    <button
+                                        type="button"
+                                        onClick={triggerAddMoreDialog}
+                                        disabled={
+                                            selectedFiles.length >= MAX_IMAGES
+                                        }
+                                        className="inline-flex items-center justify-center rounded-md border border-black/10 dark:border-white/20 bg-background text-foreground hover:bg-foreground/10 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                        Add images
+                                    </button>
+                                ) : null}
+                                {selectedFiles.length > 0 || resultImage ? (
                                     <button
                                         type="button"
                                         onClick={handleClear}
                                         className="inline-flex items-center justify-center rounded-md border border-black/10 dark:border-white/20 bg-background text-foreground hover:bg-foreground/10 px-4 py-2 text-sm font-medium transition-colors"
                                     >
-                                        Clear image
+                                        Clear images
                                     </button>
                                 ) : null}
                             </div>
