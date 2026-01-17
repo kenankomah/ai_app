@@ -81,7 +81,8 @@ export async function POST(request: NextRequest) {
         let response;
         try {
             response = await ai.models.generateContent({
-                model: "gemini-2.5-flash-image-preview",
+                // model: "gemini-2.5-flash-image-preview",
+                model: "gemini-3-pro-image-preview",
                 contents,
             });
         } catch (err: unknown) {
