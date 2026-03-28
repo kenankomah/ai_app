@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import {
+    DEFAULT_GEMINI_IMAGE_MODEL,
+    isAllowedGeminiImageModel,
+} from "@/lib/gemini-image-models";
 
 export async function POST(request: NextRequest) {
     try {
         const formData = await request.formData();
+        const modelPart = formData.get("model");
+        const modelIdRaw =
+            typeof modelPart === "string" ? modelPart.trim() : "";
+        const modelId = isAllowedGeminiImageModel(modelIdRaw)
+            ? modelIdRaw
+            : DEFAULT_GEMINI_IMAGE_MODEL;
+
         const promptPart = formData.get("prompt");
         const multiFileParts = formData.getAll("files");
         const singleFilePart = formData.get("file");
@@ -44,6 +55,7 @@ export async function POST(request: NextRequest) {
 
         // Log to server console
         console.log("Prompt:", effectivePrompt || "<none>");
+        console.log("Model:", modelId);
         console.log("Num images:", files.length);
         console.log("Total image bytes:", totalBytes);
 
@@ -81,8 +93,7 @@ export async function POST(request: NextRequest) {
         let response;
         try {
             response = await ai.models.generateContent({
-                // model: "gemini-2.5-flash-image-preview",
-                model: "gemini-3-pro-image-preview",
+                model: modelId,
                 contents,
             });
         } catch (err: unknown) {

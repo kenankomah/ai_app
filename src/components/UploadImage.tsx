@@ -2,6 +2,11 @@
 
 import React, { useRef, useState } from "react";
 import Image from "next/image";
+import {
+    DEFAULT_GEMINI_IMAGE_MODEL,
+    GEMINI_IMAGE_MODEL_OPTIONS,
+    type GeminiImageModelId,
+} from "@/lib/gemini-image-models";
 
 type UploadImageProps = {
     onFileSelected?: (file: File) => void;
@@ -19,6 +24,9 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
     const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
     const [resultImage, setResultImage] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState<boolean>(false);
+    const [modelId, setModelId] = useState<GeminiImageModelId>(
+        DEFAULT_GEMINI_IMAGE_MODEL
+    );
 
     const MAX_IMAGES = 10; // configurable
     const MAX_TOTAL_BYTES = 25 * 1024 * 1024; // 25MB total, configurable
@@ -147,6 +155,7 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                 if (selectedFiles[0]) body.append("file", selectedFiles[0]);
             }
             body.append("prompt", instructions);
+            body.append("model", modelId);
 
             const response = await fetch("/api/upload", {
                 method: "POST",
@@ -308,6 +317,31 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                                 placeholder="E.g., generate a watercolor landscape at sunset; or place this image as a repeating t‑shirt pattern"
                                 className="w-full min-h-40 rounded-md border border-black/10 dark:border-white/20 bg-background text-foreground p-3 text-sm placeholder:text-foreground/50 focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20"
                             />
+                            <div className="flex flex-col gap-2">
+                                <label
+                                    htmlFor="gemini-model"
+                                    className="text-sm font-medium"
+                                >
+                                    Model
+                                </label>
+                                <select
+                                    id="gemini-model"
+                                    value={modelId}
+                                    onChange={(e) =>
+                                        setModelId(
+                                            e.target
+                                                .value as GeminiImageModelId
+                                        )
+                                    }
+                                    className="w-full rounded-md border border-black/10 dark:border-white/20 bg-background text-foreground p-3 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20"
+                                >
+                                    {GEMINI_IMAGE_MODEL_OPTIONS.map((opt) => (
+                                        <option key={opt.id} value={opt.id}>
+                                            {opt.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                             <div className="flex items-center gap-3 pt-1">
                                 <button
                                     type="submit"
