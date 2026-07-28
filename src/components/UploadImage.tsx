@@ -28,7 +28,7 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
         DEFAULT_GEMINI_IMAGE_MODEL
     );
 
-    const MAX_IMAGES = 10; // configurable
+    const MAX_IMAGES = 15; // configurable
     const MAX_TOTAL_BYTES = 25 * 1024 * 1024; // 25MB total, configurable
 
     // removed size formatter since we don't display per-file sizes in multi-select UI
@@ -43,12 +43,25 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
     }
 
     function handleClear() {
+        setPreviewUrls((urls) => {
+            for (const url of urls) URL.revokeObjectURL(url);
+            return [];
+        });
         setSelectedFiles([]);
-        setPreviewUrls([]);
         setResultImage(null);
         setSubmitError(null);
         setSubmitSuccess(null);
         setErrorMessage(null);
+    }
+
+    function removeImage(index: number) {
+        setErrorMessage(null);
+        setSelectedFiles((files) => files.filter((_, i) => i !== index));
+        setPreviewUrls((urls) => {
+            const url = urls[index];
+            if (url) URL.revokeObjectURL(url);
+            return urls.filter((_, i) => i !== index);
+        });
     }
 
     function selectFiles(
@@ -275,8 +288,8 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-3 max-w-full">
                                     {previewUrls.map((url, idx) => (
                                         <div
-                                            key={idx}
-                                            className="w-40 h-40 rounded-lg border border-black/10 dark:border-white/20 bg-black/5 overflow-hidden flex items-center justify-center"
+                                            key={url}
+                                            className="relative w-40 h-40 rounded-lg border border-black/10 dark:border-white/20 bg-black/5 overflow-hidden flex items-center justify-center"
                                         >
                                             <Image
                                                 src={url}
@@ -288,12 +301,31 @@ export default function UploadImage({ onFileSelected }: UploadImageProps) {
                                                 unoptimized
                                                 className="object-contain w-full h-full"
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={() => removeImage(idx)}
+                                                aria-label={`Remove image ${idx + 1}`}
+                                                className="absolute top-1.5 right-1.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border border-black/10 dark:border-white/20 bg-background/90 text-foreground shadow-sm hover:bg-foreground hover:text-background transition-colors"
+                                            >
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2"
+                                                    strokeLinecap="round"
+                                                    className="h-3.5 w-3.5"
+                                                    aria-hidden="true"
+                                                >
+                                                    <path d="M6 6l12 12M18 6L6 18" />
+                                                </svg>
+                                            </button>
                                         </div>
                                     ))}
                                 </div>
                             ) : null}
                             {selectedFiles.length > 0 ? (
-                                <p className="text-xs text-foreground/60 truncate max-w-full">
+                                <p className="self-start w-full text-left text-xs text-foreground/60 truncate max-w-full">
                                     {selectedFiles[0].name}
                                     {selectedFiles.length > 1
                                         ? ` + ${selectedFiles.length - 1} more`
